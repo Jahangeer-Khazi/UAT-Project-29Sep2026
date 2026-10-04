@@ -1,0 +1,157 @@
+<template>
+    <lightning-card title="Login Activity Details Tracker">
+        <div slot="actions">
+            <!-- Generate Report Button -->
+            <lightning-button label="Generate Report" icon-name="utility:download" onclick={toggleReportPanel}
+                variant="brand-outline"></lightning-button>
+        </div>
+
+        <!-- Report Filter Panel -->
+        <template if:true={isReportPanelOpen}>
+            <div class="slds-box slds-theme_shade slds-m-around_medium">
+                <div class="slds-grid slds-gutters">
+                    <div class="slds-col">
+                        <lightning-input type="date" label="Date From" name="reportFromDate" value={reportFromDate}
+                            onchange={handleReportFilterChange} required></lightning-input>
+                    </div>
+                    <div class="slds-col">
+                        <lightning-input type="date" label="Date To" name="reportToDate" value={reportToDate}
+                            onchange={handleReportFilterChange} required></lightning-input>
+                    </div>
+                    <div class="slds-col">
+                        <lightning-combobox label="Result" name="reportResult" value={reportResult}
+                            options={reportResultOptions} onchange={handleReportFilterChange}></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-align-bottom">
+                        <lightning-button label="Download Excel" onclick={handleGenerateAndDownload} variant="brand"
+                            icon-name="utility:download"></lightning-button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template if:true={error}>
+            <div class="slds-p-around_medium slds-text-color_error">
+                {error}
+            </div>
+        </template>
+
+        <template if:true={isLoading}>
+            <div class="slds-p-around_medium is-relative">
+                <lightning-spinner alternative-text="Loading..." size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <template if:false={isLoading}>
+            <template if:false={error}>
+
+                <!-- Collapsed View: 5 Recent Records -->
+                <template if:false={isExpanded}>
+                    <div class="slds-p-horizontal_medium">
+                        <template if:true={recentActivity} for:each={recentActivity} for:item="item">
+                            <div key={item.id} class="slds-tile slds-border_bottom slds-p-vertical_small">
+                                <div class="slds-grid slds-grid_align-spread slds-has-flexi-truncate">
+                                    <h3 class="slds-tile__title slds-truncate" title={item.description}>
+                                        {item.description}
+                                    </h3>
+                                    <div class="slds-shrink-none">
+                                        <lightning-badge label={item.result} class={item.badgeClass}></lightning-badge>
+                                    </div>
+                                </div>
+                                <div class="slds-tile__detail">
+                                    <dl class="slds-list_horizontal slds-wrap">
+                                        <dt class="slds-item_label slds-text-color_weak slds-truncate" title="Date">
+                                            Date:</dt>
+                                        <dd class="slds-item_detail slds-truncate">
+                                            <lightning-formatted-date-time value={item.timestamp} year="numeric"
+                                                month="short" day="2-digit" hour="2-digit"
+                                                minute="2-digit"></lightning-formatted-date-time>
+                                        </dd>
+                                        <dt class="slds-item_label slds-text-color_weak slds-truncate" title="IP Address">
+                                            IP:</dt>
+                                        <dd class="slds-item_detail slds-truncate">{item.category}</dd>
+                                        <dt class="slds-item_label slds-text-color_weak slds-truncate" title="Location">
+                                            Location:</dt>
+                                        <dd class="slds-item_detail slds-truncate">{item.unit}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </template>
+                        <template if:false={hasData}>
+                            <p class="slds-text-align_center slds-text-color_weak">No recent details found.</p>
+                        </template>
+                    </div>
+                    <div slot="footer" class="slds-text-align_right">
+                        <lightning-button label="View All" title="View All Details" onclick={handleViewAll}
+                            variant="base"></lightning-button>
+                    </div>
+                </template>
+
+                <!-- Expanded View -->
+                <template if:true={isExpanded}>
+                    <div class="slds-p-around_medium">
+                        <!-- Expanded View Filters -->
+                        <div class="slds-grid slds-gutters slds-m-bottom_medium">
+                            <div class="slds-col slds-size_1-of-3">
+                                <lightning-input type="date" label="From" value={filterFromDate}
+                                    onchange={handleFilterChange} name="fromDate"></lightning-input>
+                            </div>
+                            <div class="slds-col slds-size_1-of-3">
+                                <lightning-input type="date" label="To" value={filterToDate}
+                                    onchange={handleFilterChange} name="toDate"></lightning-input>
+                            </div>
+                            <div class="slds-col slds-size_1-of-3">
+                                <div class="slds-grid slds-gutters slds-grid_vertical-align-end">
+                                    <div class="slds-col">
+                                        <lightning-combobox label="Status" value={filterStatus} placeholder="All"
+                                            options={statusOptions} onchange={handleFilterChange}
+                                            name="status"></lightning-combobox>
+                                    </div>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button label="Apply" onclick={applyFilters}
+                                            variant="brand"></lightning-button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="height: 300px;">
+                            <!-- Using historyData here as it is now holding the page's data -->
+                            <lightning-datatable key-field="id" data={historyData} columns={columns}
+                                hide-checkbox-column>
+                            </lightning-datatable>
+                        </div>
+
+                        <!-- Numeric Pagination -->
+                        <div class="slds-m-top_medium slds-align_absolute-center">
+                            <lightning-button-group>
+                                <lightning-button label="Previous" icon-name="utility:chevronleft"
+                                    onclick={handlePrevPage} disabled={isFirstPage}></lightning-button>
+
+                                <template for:each={pageList} for:item="page">
+                                    <template if:true={page.isDots}>
+                                        <lightning-button key={page.value} label="..." disabled variant="base"
+                                            class="slds-p-horizontal_x-small"></lightning-button>
+                                    </template>
+                                    <template if:false={page.isDots}>
+                                        <lightning-button key={page.value} label={page.label} data-value={page.value}
+                                            onclick={handlePageClick} variant={page.variant}></lightning-button>
+                                    </template>
+                                </template>
+
+                                <lightning-button label="Next" icon-name="utility:chevronright" icon-position="right"
+                                    onclick={handleNextPage} disabled={isLastPage}></lightning-button>
+                            </lightning-button-group>
+                        </div>
+
+                    </div>
+                    <div slot="footer" class="slds-text-align_right">
+                        <lightning-button label="Collapse" title="Collapse View" onclick={handleCollapse}
+                            variant="base"></lightning-button>
+                    </div>
+                </template>
+
+            </template>
+        </template>
+    </lightning-card>
+</template>
