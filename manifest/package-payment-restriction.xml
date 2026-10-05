@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    Credit Card Payment Restriction (NBA-16942)
+
+    New components:      DailyPaymentHistoryController, dailyPaymentLimit, historyLogs, cifOverride,
+                         creditCardListEvent
+    Modified components: bankInformation (Daily Payment Limit tab, handleCreditCardStatus handler),
+                         creditCardList (fires creditCardListEvent)
+
+    Used but not changed by this project (must already exist in the target org):
+      ApexClass        ApiConnection (builds the callouts)
+      Aura             apexService
+      CustomMetadata   Region.Bahrain, Region.Jordan (Region__mdt: API_Endpoint__c, API_Key__c, API_variable__c)
+      NamedCredential  NeoBank_Endpoint, Jordan_Endpoint (named in Region__mdt.API_Endpoint__c; not in this repo)
+      CustomField      Account: CIF__pc, PersonEmail, Region_Flag__c, x_canary__pc
+
+    Note: no test class covers DailyPaymentHistoryController, so a production deploy will fail the
+    75% Apex coverage check until one (with an HttpCalloutMock) is added to this package.
+-->
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>DailyPaymentHistoryController</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>bankInformation</members>
+        <members>cifOverride</members>
+        <members>creditCardList</members>
+        <members>creditCardListEvent</members>
+        <members>dailyPaymentLimit</members>
+        <members>historyLogs</members>
+        <name>AuraDefinitionBundle</name>
+    </types>
+    <version>68.0</version>
+</Package>
