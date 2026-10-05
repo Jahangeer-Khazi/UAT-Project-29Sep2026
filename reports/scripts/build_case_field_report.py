@@ -27,8 +27,8 @@ CATEGORIES = [
                                    "Formula Field (Case)", "Formula Field (Other Object)",
                                    "Field Dependency (Picklist)", "Lookup Filter",
                                    "Duplicate Rule", "Matching Rule"]),
-    ("Configuration Data", ["Custom Metadata Record"]),
-    ("UI & Reporting", ["Page Layout", "Compact Layout", "Quick Action", "List View", "Record Type",
+    ("Configuration Data", ["Custom Metadata Record", "Custom Label"]),
+    ("UI & Reporting", ["Page Layout", "Page Layout (Related List)", "Compact Layout", "Quick Action", "List View", "Record Type",
                         "Business Process", "Web Link / Button", "Report Type"]),
 ]
 TYPE_CAT = {t: c for c, ts in CATEGORIES for t in ts}
@@ -281,6 +281,8 @@ notes = {
     "Lookup Filter": "Case lookup filters referencing $Source fields",
     "Validation Rule (Other Object)": "Other objects' rules referencing Case via lookup (e.g. Case__r.Status)",
     "Formula Field (Other Object)": "Other objects' formulas referencing Case via lookup",
+    "Custom Label": "Labels whose value lists Case field API names (often read by Apex for dynamic field lists)",
+    "Page Layout (Related List)": "Case related lists (and their columns) on other objects' layouts",
     "Web Link / Button": "Case custom buttons/links using {!Case.Field} merge fields",
 }
 dist_start = r + 1

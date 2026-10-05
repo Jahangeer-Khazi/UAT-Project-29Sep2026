@@ -182,12 +182,17 @@ for obj in os.listdir(os.path.join(SRC, "objects")):
     for fn in os.listdir(fd):
         p = os.path.join(fd, fn)
         txt = read(p)
-        if "<referenceTo>Case</referenceTo>" in txt:
-            m = re.search(r"<relationshipName>([^<]+)</relationshipName>", txt)
-            if m:
-                case_rel_names.add(m.group(1) + "__r")
-# Parent relationship on Case itself
-case_rel_names.add("Parent")
+        # From the child record, a lookup X__c to Case is traversed as X__r (e.g. Case__r.Status)
+        if "<referenceTo>Case</referenceTo>" in txt and fn.endswith("__c.field-meta.xml"):
+            case_rel_names.add(fn.replace("__c.field-meta.xml", "__r"))
+# ("Parent" is not added: Parent.X is ambiguous outside Case formulas, where it maps to ParentId)
+
+# From a parent object, Cases are reached through the child relationship name of
+# Case's own lookup fields (e.g. Listed_Employers__c.Cases1__r in report types)
+case_child_rels = {"Cases", "Case"}
+for f in fields.values():
+    if f["reference_to"] and f["relationship_name"]:
+        case_child_rels.add(f["relationship_name"] + "__r")
 
 
 def resolve(token):
@@ -530,7 +535,9 @@ for fn in sorted(os.listdir(flow_dir)):
             on_case = start_obj == "Case"
             how = "Start element (entry criteria / scheduled paths) on Case"
         elif tag in record_tags:
-            on_case = child_text(el, "object") == "Case" or child_text(el, "inputReference").lower() in case_vars
+            ref = child_text(el, "inputReference")
+            on_case = (child_text(el, "object") == "Case" or ref.lower() in case_vars
+                       or ("." in ref and ref.split(".")[-1].lower() in {r.lower() for r in case_rel_names}))
             how = "%s on Case" % tag
         elif tag in ("dynamicChoiceSets", "recordChoiceSets"):
             on_case = child_text(el, "object") == "Case" or child_text(el, "picklistObject") == "Case"
@@ -923,7 +930,7 @@ for fn in sorted(os.listdir(os.path.join(SRC, "reportTypes"))):
     for col in root.iter(NS + "columns"):
         table = child_text(col, "table")
         last = table.split(".")[-1]
-        if table == "Case" or last in ("Cases", "Case") or last in case_rel_names:
+        if table == "Case" or last in case_child_rels or last in case_rel_names:
             fld = child_text(col, "field")
             f = resolve(fld)
             if f:
@@ -970,7 +977,7 @@ for d, mtype in (("duplicateRules", "Duplicate Rule"), ("matchingRules", "Matchi
 
 # Custom metadata records that name Case fields
 cmd_dir = os.path.join(SRC, "customMetadata")
-VALUES_RE = re.compile(r"<values>\s*<field>([^<]+)</field>\s*<value[^>]*>(.*?)</value>", re.S)
+VALUES_RE = re.compile(r"<values>\s*<field>([^<]+)</field>\s*<value(?:\s[^>]*)?>([^<]*)</value>", re.S)
 for fn in sorted(os.listdir(cmd_dir)):
     path = os.path.join(cmd_dir, fn)
     text = read(path)
@@ -1021,6 +1028,64 @@ for fn in sorted(os.listdir(cmd_dir)):
     if n:
         components.append(("Custom Metadata Record", name, rel(path), "", "", len(n)))
 
+# Custom labels whose value lists Case field API names (used for dynamic field lists)
+lbl = os.path.join(SRC, "labels", "CustomLabels.labels-meta.xml")
+if os.path.exists(lbl):
+    root = parse_xml(lbl)
+    text = read(lbl)
+    for lab in root.findall(NS + "labels"):
+        name = child_text(lab, "fullName")
+        val = child_text(lab, "value")
+        pos = text.find("<fullName>%s</fullName>" % name)
+        n = set()
+        explicit = {t.lower() for t in re.findall(r"\bCase\.(\w+)", val)}
+        for tok in explicit:
+            if tok in LOWER:
+                n.add(LOWER[tok])
+                add(LOWER[tok], "Custom Label", name, lbl, detail="Value names Case.%s" % LOWER[tok],
+                    lines=[line_of(text, pos)], evidence=val[:250])
+        for item in re.split(r"[;,|\s]+", val):
+            f = LOWER.get(item.strip().lower())
+            if not f or f.lower() in explicit or not fields[f]["custom"] or f.lower() in OBJECT_NAMES:
+                continue
+            conf = PROBABLE if not fields[f]["shared_name"] else POSSIBLE
+            n.add(f)
+            add(f, "Custom Label", name, lbl, detail="Value lists API name", confidence=conf,
+                lines=[line_of(text, pos)], evidence=val[:250])
+        if n:
+            components.append(("Custom Label", name, rel(lbl), "", "", len(n)))
+
+# Case related lists on other objects' page layouts
+for fn in sorted(os.listdir(os.path.join(SRC, "layouts"))):
+    if fn.startswith("Case-"):
+        continue
+    path = os.path.join(SRC, "layouts", fn)
+    root = parse_xml(path)
+    if root is None:
+        continue
+    text = read(path)
+    name = fn.replace(".layout-meta.xml", "")
+    n = set()
+    for rl in root.findall(NS + "relatedLists"):
+        rname = child_text(rl, "relatedList")
+        if not (rname == "RelatedCaseList" or rname.startswith("Case.")):
+            continue
+        pos = text.find("<relatedList>%s</relatedList>" % rname)
+        if rname.startswith("Case."):
+            f = resolve(rname)
+            if f:
+                n.add(f)
+                add(f, "Page Layout (Related List)", name, path, detail="Related list via lookup %s" % f,
+                    lines=[line_of(text, pos)], evidence="<relatedList>%s</relatedList>" % rname)
+        for fe in rl.findall(NS + "fields"):
+            f = resolve(fe.text or "")
+            if f:
+                n.add(f)
+                add(f, "Page Layout (Related List)", name, path, detail="Column in %s related list" % rname,
+                    lines=[line_of(text, pos)], evidence="<fields>%s</fields>" % fe.text)
+    if n:
+        components.append(("Page Layout (Related List)", name, rel(path), "", "", len(n)))
+
 # --------------------------------------------------------------------------
 rows = []
 for r in deps.values():
@@ -1039,6 +1104,7 @@ out = {
     "components": components,
     "escalation_present": ESCALATION_PRESENT,
     "case_relationships": sorted(case_rel_names),
+    "case_child_relationships": sorted(case_child_rels),
     "metadata_dirs": sorted(os.listdir(SRC)),
 }
 with open(OUT, "w") as fh:
