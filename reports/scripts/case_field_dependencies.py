@@ -502,33 +502,55 @@ for fn in sorted(os.listdir(flow_dir)):
     for v in root.findall(NS + "variables"):
         if child_text(v, "objectType") == "Case":
             case_vars.add(child_text(v, "name").lower())
-    lookup_names = []
+    record_tags = ("recordLookups", "recordCreates", "recordUpdates", "recordDeletes")
+    # Pass 1: names that hold Case records (Get Records outputs, loops over Case collections)
     for el in root:
         tag = strip_ns(el.tag)
-        obj = child_text(el, "object")
-        if obj == "Case" and tag in ("recordLookups", "recordCreates", "recordUpdates", "recordDeletes"):
-            ename = child_text(el, "name")
-            lookup_names.append(ename)
+        if child_text(el, "object") == "Case" and tag in record_tags:
             if tag == "recordLookups" and child_text(el, "storeOutputAutomatically") == "true":
-                case_vars.add(ename.lower())
+                case_vars.add(child_text(el, "name").lower())
             out = child_text(el, "outputReference")
             if out:
                 case_vars.add(out.lower())
-            for f_el in el.iter():
-                t2 = strip_ns(f_el.tag)
-                if t2 in ("field", "queriedFields", "sortField") and f_el.text:
-                    f = resolve(f_el.text.strip())
-                    if f:
-                        pos = text.find(">%s<" % f_el.text.strip(), text.find("<name>%s</name>" % ename))
-                        add(f, mtype, name, path, detail="", confidence=CONFIRMED,
-                            lines=[line_of(text, pos)] if pos > 0 else None,
-                            evidence="%s '%s' on Case uses field %s" % (tag, ename, f_el.text.strip()),
-                            status=status, how="%s on Case" % tag)
-    # loops over Case collections
-    for lp in root.findall(NS + "loops"):
-        coll = child_text(lp, "collectionReference").lower()
-        if coll in case_vars:
-            case_vars.add(child_text(lp, "name").lower())
+    changed = True
+    while changed:
+        changed = False
+        for lp in root.findall(NS + "loops"):
+            lname = child_text(lp, "name").lower()
+            if child_text(lp, "collectionReference").lower() in case_vars and lname not in case_vars:
+                case_vars.add(lname)
+                changed = True
+
+    # Pass 2: elements that act on Case records and name fields directly
+    field_tags = ("field", "queriedFields", "sortField", "recordField", "displayField", "valueField", "picklistField")
+    for el in root:
+        tag = strip_ns(el.tag)
+        ename = child_text(el, "name")
+        if tag == "start":
+            on_case = start_obj == "Case"
+            how = "Start element (entry criteria / scheduled paths) on Case"
+        elif tag in record_tags:
+            on_case = child_text(el, "object") == "Case" or child_text(el, "inputReference").lower() in case_vars
+            how = "%s on Case" % tag
+        elif tag in ("dynamicChoiceSets", "recordChoiceSets"):
+            on_case = child_text(el, "object") == "Case" or child_text(el, "picklistObject") == "Case"
+            how = "%s on Case" % tag
+        else:
+            continue
+        if not on_case:
+            continue
+        anchor = text.find("<name>%s</name>" % ename) if ename else text.find("<start>")
+        for f_el in el.iter():
+            t2 = strip_ns(f_el.tag)
+            if t2 in field_tags and f_el.text:
+                f = resolve(f_el.text.strip())
+                if f:
+                    pos = text.find(">%s<" % f_el.text.strip(), max(anchor, 0))
+                    label = ("start (%s)" % t2) if tag == "start" else "%s '%s' (%s)" % (tag, ename, t2)
+                    add(f, mtype, name, path, detail="", confidence=CONFIRMED,
+                        lines=[line_of(text, pos)] if pos > 0 else None,
+                        evidence="%s uses field %s" % (label, f_el.text.strip()),
+                        status=status, how=how)
     # Process Builder: myVariable_current / myVariable_old with objectType Case
     for pv in root.findall(NS + "processMetadataValues"):
         pass
