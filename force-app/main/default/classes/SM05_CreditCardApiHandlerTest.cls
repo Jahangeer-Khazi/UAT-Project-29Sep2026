@@ -2,8 +2,19 @@
  * @description       : 
  * @author            : Elmustapha ELGARNI
  * @group             : 
- * @last modified on  : 06-20-2023
- * @last modified by  : Elmustapha ELGARNI
+ * @last modified on  : 27-10-2026
+ * @last modified by  : Jahangeer Mohammed
+ * @change history    :
+ *      #CH01# #Jahangeer Mohammed# #27-10-2026# Added test coverage for SM05_CreditCardApiHandler.convertRate and
+ *             SM05_CreditCardApiHandler.convertFee (Jordan Balance Transfer Process - NBA-15608).
+ *             New test methods:
+ *               - convertRate_BlankValue_Test         : null, empty and whitespace-only rate returns 0
+ *               - convertRate_ValidValue_Test         : '5%', ' 5 % ', '5' and '0%' are converted to Integer
+ *               - convertRate_DecimalValue_Test       : decimal rate ('2.5%') throws System.TypeException (current behaviour)
+ *               - convertFee_BlankValue_Test          : null, empty and whitespace-only fee returns 0
+ *               - convertFee_ValidValue_Test          : '50 JOD', '50JOD', ' 50 ' and '0 JOD' are converted to Integer
+ *               - convertFee_DecimalValue_Test        : decimal fee ('12.75 JOD') is truncated to 12 (not rounded)
+ *               - convertFee_InvalidValue_Test        : non-numeric fee ('ABC JOD') throws System.TypeException
 **/
 @isTest
 public with sharing class SM05_CreditCardApiHandlerTest {
@@ -362,7 +373,97 @@ public with sharing class SM05_CreditCardApiHandlerTest {
             SM05_CreditCardApiHandler.getCardProductConfigurationId_SupplementaryCase(cases.get(0));
         Test.stopTest();
 
-        
+
     }
+
+    //CH01: Start
+    @isTest
+    static void convertRate_BlankValue_Test(){
+        Test.startTest();
+            Integer nullRate = SM05_CreditCardApiHandler.convertRate(null);
+            Integer emptyRate = SM05_CreditCardApiHandler.convertRate('');
+            Integer spaceRate = SM05_CreditCardApiHandler.convertRate('   ');
+        Test.stopTest();
+        System.assertEquals(0, nullRate, 'Null rate should return 0');
+        System.assertEquals(0, emptyRate, 'Empty rate should return 0');
+        System.assertEquals(0, spaceRate, 'Whitespace-only rate should return 0');
+    }
+
+    @isTest
+    static void convertRate_ValidValue_Test(){
+        Test.startTest();
+            Integer percentRate = SM05_CreditCardApiHandler.convertRate('5%');
+            Integer paddedRate = SM05_CreditCardApiHandler.convertRate(' 5 % ');
+            Integer plainRate = SM05_CreditCardApiHandler.convertRate('5');
+            Integer zeroRate = SM05_CreditCardApiHandler.convertRate('0%');
+        Test.stopTest();
+        System.assertEquals(5, percentRate, 'Percentage sign should be removed');
+        System.assertEquals(5, paddedRate, 'Surrounding spaces should be trimmed');
+        System.assertEquals(5, plainRate, 'Rate without percentage sign should be converted');
+        System.assertEquals(0, zeroRate, 'Zero rate should be converted');
+    }
+
+    @isTest
+    static void convertRate_DecimalValue_Test(){
+        Boolean isException = false;
+        Test.startTest();
+            try{
+                SM05_CreditCardApiHandler.convertRate('2.5%');
+            }catch(System.TypeException ex){
+                isException = true;
+            }
+        Test.stopTest();
+        System.assertEquals(true, isException, 'Decimal rate is not supported by Integer.valueOf and should throw TypeException');
+    }
+
+    @isTest
+    static void convertFee_BlankValue_Test(){
+        Test.startTest();
+            Integer nullFee = SM05_CreditCardApiHandler.convertFee(null);
+            Integer emptyFee = SM05_CreditCardApiHandler.convertFee('');
+            Integer spaceFee = SM05_CreditCardApiHandler.convertFee('   ');
+        Test.stopTest();
+        System.assertEquals(0, nullFee, 'Null fee should return 0');
+        System.assertEquals(0, emptyFee, 'Empty fee should return 0');
+        System.assertEquals(0, spaceFee, 'Whitespace-only fee should return 0');
+    }
+
+    @isTest
+    static void convertFee_ValidValue_Test(){
+        Test.startTest();
+            Integer currencyFee = SM05_CreditCardApiHandler.convertFee('50 JOD');
+            Integer noSpaceFee = SM05_CreditCardApiHandler.convertFee('50JOD');
+            Integer plainFee = SM05_CreditCardApiHandler.convertFee(' 50 ');
+            Integer zeroFee = SM05_CreditCardApiHandler.convertFee('0 JOD');
+        Test.stopTest();
+        System.assertEquals(50, currencyFee, 'JOD suffix should be removed');
+        System.assertEquals(50, noSpaceFee, 'JOD suffix without space should be removed');
+        System.assertEquals(50, plainFee, 'Fee without JOD suffix should be converted');
+        System.assertEquals(0, zeroFee, 'Zero fee should be converted');
+    }
+
+    @isTest
+    static void convertFee_DecimalValue_Test(){
+        Test.startTest();
+            Integer decimalFee = SM05_CreditCardApiHandler.convertFee('12.75 JOD');
+            Integer lowDecimalFee = SM05_CreditCardApiHandler.convertFee('12.25 JOD');
+        Test.stopTest();
+        System.assertEquals(12, decimalFee, 'Decimal fee should be truncated, not rounded');
+        System.assertEquals(12, lowDecimalFee, 'Decimal fee should be truncated');
+    }
+
+    @isTest
+    static void convertFee_InvalidValue_Test(){
+        Boolean isException = false;
+        Test.startTest();
+            try{
+                SM05_CreditCardApiHandler.convertFee('ABC JOD');
+            }catch(System.TypeException ex){
+                isException = true;
+            }
+        Test.stopTest();
+        System.assertEquals(true, isException, 'Non-numeric fee should throw TypeException');
+    }
+    //CH01: END
 
 }
